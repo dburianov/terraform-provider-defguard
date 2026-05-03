@@ -64,7 +64,9 @@ func resourceGroupRead(ctx context.Context, d *schema.ResourceData, meta interfa
 
 	// In a real implementation, we would set the fields from the API response
 	// For now, just simulate that we read the group successfully
-	d.Set("name", name)
+	if err := d.Set("name", name); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return nil
 }

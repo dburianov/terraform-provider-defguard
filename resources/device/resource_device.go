@@ -67,7 +67,9 @@ func resourceDeviceRead(ctx context.Context, d *schema.ResourceData, meta interf
 
 	// In a real implementation, we would set the fields from the API response
 	// For now, just simulate that we read the device successfully
-	d.Set("id", id)
+	if err := d.Set("id", id); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return nil
 }

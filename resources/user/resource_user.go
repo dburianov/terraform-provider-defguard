@@ -75,7 +75,9 @@ func resourceUserRead(ctx context.Context, d *schema.ResourceData, meta interfac
 
 	// In a real implementation, we would set the fields from the API response
 	// For now, just simulate that we read the user successfully
-	d.Set("username", username)
+	if err := d.Set("username", username); err != nil {
+		return diag.FromErr(err)
+	}
 
 	return nil
 }

@@ -33,17 +33,17 @@ jobs:
           echo "pinentry-mode loopback" > ~/.gnupg/gpg.conf
           gpg-connect-agent reloadagent /bye
 
-      - name: Test GPG signing (with passphrase)
-        if: secrets.PASSPHRASE != ''
+      - name: Test GPG signing
         env:
           GPG_PASSPHRASE: ${{ secrets.PASSPHRASE }}
         run: |
-          echo "test" | gpg --clearsign --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" > /dev/null 2>&1
-
-      - name: Test GPG signing (no passphrase)
-        if: secrets.PASSPHRASE == ''
-        run: |
-          echo "test" | gpg --clearsign --pinentry-mode loopback --batch --yes > /dev/null 2>&1
+          if [ -n "$GPG_PASSPHRASE" ]; then
+            echo "Testing GPG with passphrase..."
+            echo "test" | gpg --clearsign --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" > /dev/null 2>&1
+          else
+            echo "Testing GPG without passphrase..."
+            echo "test" | gpg --clearsign --pinentry-mode loopback --batch --yes > /dev/null 2>&1
+          fi
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

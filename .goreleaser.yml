@@ -41,17 +41,14 @@ signs:
     cmd: gpg
     args:
       - "--batch"
-      - "--local-user"
-      - "{{ .Env.GPG_FINGERPRINT }}"
-      - "--passphrase"
-      - "{{ .Env.PASSPHRASE }}"
+      - "--yes"
       - "--pinentry-mode"
       - "loopback"
-      - "--output"
-      - "${signature}"
+      - "--passphrase"
+      - "{{ .Env.PASSPHRASE }}"
       - "--detach-sign"
+      - "--armor"
       - "${artifact}"
-
 release:
   extra_files:
     - glob: "terraform-registry-manifest.json"

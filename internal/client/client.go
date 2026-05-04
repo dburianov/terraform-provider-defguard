@@ -69,7 +69,12 @@ func (c *Client) doRequest(ctx context.Context, req Request) (*Response, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log error but don't change the response
+			_ = fmt.Errorf("failed to close response body: %w", err)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

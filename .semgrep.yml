@@ -9,7 +9,7 @@ rules:
           "-----BEGIN PGP PRIVATE KEY BLOCK-----"
     message: "Hardcoded private key detected"
     severity: ERROR
-    languages: [go]
+    languages: [ go ]
 
   - id: weak-crypto
     patterns:
@@ -17,22 +17,18 @@ rules:
       - pattern: crypto.SHA1
     message: "Weak cryptographic algorithm detected"
     severity: WARNING
-    languages: [go]
+    languages: [ go ]
 
   - id: sensitive-data-logging
     patterns:
-      - pattern: |
-          log.Printf($X, ..., $SENSITIVE, ...)
-      - pattern: |
-          fmt.Printf($X, ..., $SENSITIVE, ...)
-    where:
+      - pattern-either:
+          - pattern: log.Printf($X, ..., $SENSITIVE, ...)
+          - pattern: fmt.Printf($X, ..., $SENSITIVE, ...)
       - metavariable-pattern:
           metavariable: $SENSITIVE
-          patterns:
-            - pattern: |
-                $VAR.content
-            - pattern: |
-                $VAR.result
+          pattern-either:
+            - pattern: $VAR.content
+            - pattern: $VAR.result
     message: "Potential sensitive data logging"
     severity: WARNING
-    languages: [go]
+    languages: [ go ]

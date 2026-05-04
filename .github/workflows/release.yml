@@ -26,24 +26,14 @@ jobs:
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
+          git_config_global: true
+          pinentry_mode: loopback
 
       - name: Configure GPG for non-interactive signing
         run: |
           echo "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
           echo "pinentry-mode loopback" > ~/.gnupg/gpg.conf
-          gpg-connect-agent reloadagent /bye
-
-      - name: Test GPG signing
-        env:
-          GPG_PASSPHRASE: ${{ secrets.PASSPHRASE }}
-        run: |
-          if [ -n "$GPG_PASSPHRASE" ]; then
-            echo "Testing GPG with passphrase..."
-            echo "test" | gpg --clearsign --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" > /dev/null 2>&1
-          else
-            echo "Testing GPG without passphrase..."
-            echo "test" | gpg --clearsign --pinentry-mode loopback --batch --yes > /dev/null 2>&1
-          fi
+          gpgconf --kill gpg-agent
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -54,3 +44,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
           PASSPHRASE: ${{ secrets.PASSPHRASE }}
+          GPG_TTY: /dev/pts/0

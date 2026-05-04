@@ -28,11 +28,13 @@ jobs:
           passphrase: ${{ secrets.PASSPHRASE }}
 
       - name: Configure GPG for non-interactive signing
+        env:
+          GPG_PASSPHRASE: ${{ secrets.PASSPHRASE }}
         run: |
           echo "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
           echo "pinentry-mode loopback" > ~/.gnupg/gpg.conf
           gpg-connect-agent reloadagent /bye
-          echo "test" | gpg --clearsign --pinentry-mode loopback --passphrase "${{ secrets.PASSPHRASE }}" > /dev/null
+          echo "test" | gpg --clearsign --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" > /dev/null 2>&1
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

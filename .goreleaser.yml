@@ -23,10 +23,11 @@ builds:
     binary: "{{ .ProjectName }}_v{{ .Version }}"
     hooks:
       post:
-        - cp terraform-registry-manifest.json dist/{{ .ProjectName }}_{{ .Version }}_manifest.json
+        - cp terraform-registry-manifest.json dist/{{ .ProjectName }}_{{
+          .Version }}_manifest.json
 
 archives:
-  - formats: ["zip"]
+  - formats: [ "zip" ]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
@@ -37,10 +38,15 @@ checksum:
 
 signs:
   - artifacts: checksum
+    cmd: gpg
     args:
       - "--batch"
       - "--local-user"
       - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--passphrase"
+      - "{{ .Env.PASSPHRASE }}"
+      - "--pinentry-mode"
+      - "loopback"
       - "--output"
       - "${signature}"
       - "--detach-sign"

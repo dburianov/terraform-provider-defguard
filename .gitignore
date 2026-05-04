@@ -2,6 +2,15 @@
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 # Binaries for programs and plugins
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+*.tfplan
+
+# Go
 *.exe
 *.exe~
 *.dll
@@ -26,7 +35,26 @@ go.work.sum
 
 # env file
 .env
-
+vendor/
 # Editor/IDE
 # .idea/
 # .vscode/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI helpers
+.amazonq
+.ollama
+
+# CI reports
+gl-*-report.json
+
+# Dev and test resources
+test/
+terraform-provider*

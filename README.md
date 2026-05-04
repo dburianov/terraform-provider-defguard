@@ -30,8 +30,8 @@ terraform {
 }
 
 provider "defguard" {
-  url      = "http://localhost:8000"
-  api_key  = var.defguard_api_key
+  endpoint      = "http://localhost:8000"
+  api_token  = var.defguard_api_token
   session  = var.defguard_session
 }
 ```

@@ -22,6 +22,7 @@ type defguardProviderModel struct {
 	Endpoint types.String `tfsdk:"endpoint"`
 	APIToken types.String `tfsdk:"api_token"`
 	Insecure types.Bool   `tfsdk:"insecure"`
+	Session  types.String `tfsdk:"session"`
 }
 
 func (p *defguardProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -40,6 +41,11 @@ func (p *defguardProvider) Schema(ctx context.Context, req provider.SchemaReques
 				Optional:    true,
 				Sensitive:   true,
 				Description: "API token for authentication. If not set, cookie authentication will be used.",
+			},
+			"session": schema.StringAttribute{
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Session cookie value for authentication. If not set, API token will be used.",
 			},
 			"insecure": schema.BoolAttribute{
 				Optional:    true,
@@ -63,7 +69,15 @@ func (p *defguardProvider) Configure(ctx context.Context, req provider.Configure
 		apiToken = data.APIToken.ValueString()
 	}
 
+	insecure := false
+	if !data.Insecure.IsUnknown() && !data.Insecure.IsNull() {
+		insecure = data.Insecure.ValueBool()
+	}
+
 	p.client = client.NewClient(endpoint, apiToken)
+	if insecure {
+		p.client.SetInsecure()
+	}
 
 	resp.ResourceData = p.client
 }

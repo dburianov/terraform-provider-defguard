@@ -14,6 +14,7 @@ import (
 type Client struct {
 	baseURL    string
 	apiToken   string
+	insecure   bool
 	httpClient *http.Client
 }
 
@@ -24,6 +25,16 @@ func NewClient(endpoint string, apiToken string) *Client {
 		apiToken:   apiToken,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
+}
+
+// SetInsecure sets the client to skip TLS verification
+func (c *Client) SetInsecure() {
+	c.insecure = true
+	// Create a new transport with insecure skip verify
+	transport := &http.Transport{
+		DisableKeepAlives: true,
+	}
+	c.httpClient.Transport = transport
 }
 
 // Request is a generic request structure

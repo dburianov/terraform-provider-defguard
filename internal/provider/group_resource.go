@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dburianov/terraform-provider-defguard/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -134,7 +135,7 @@ func (r *GroupResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 
 	groupName := state.Name.ValueString()
-	path := fmt.Sprintf("/api/v1/group-info/%s", groupName)
+	path := fmt.Sprintf("/api/v1/group/%s", groupName)
 
 	respObj, err := r.client.Get(ctx, path)
 	if err != nil {
@@ -152,7 +153,23 @@ func (r *GroupResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
-	// Update state from response
+	// Update state from response - only set computed fields
+	if val, ok := result["id"].(float64); ok {
+		state.ID = types.Int64Value(int64(val))
+	}
+	if val, ok := result["is_admin"].(bool); ok {
+		state.IsAdmin = types.BoolValue(val)
+	}
+	if val, ok := result["vpn_locations"].([]interface{}); ok {
+		locations := make([]attr.Value, 0, len(val))
+		for _, v := range val {
+			if s, ok := v.(string); ok {
+				locations = append(locations, types.StringValue(s))
+			}
+		}
+		state.VPNLocations = types.ListValueMust(types.StringType, locations)
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 

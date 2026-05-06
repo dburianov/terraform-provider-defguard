@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dburianov/terraform-provider-defguard/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -164,10 +165,14 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 		"first_name": plan.FirstName.ValueString(),
 		"last_name":  plan.LastName.ValueString(),
 		"email":      plan.Email.ValueString(),
-		"phone":      plan.Phone.ValueString(),
 		"is_admin":   plan.IsAdmin.ValueBool(),
 		"is_active":  plan.IsActive.ValueBool(),
 		"groups":     groups,
+	}
+
+	// Only include phone if it's set
+	if !plan.Phone.IsUnknown() && !plan.Phone.IsNull() && plan.Phone.ValueString() != "" {
+		payload["phone"] = plan.Phone.ValueString()
 	}
 
 	respObj, err := r.client.Post(ctx, "/api/v1/user", payload)
@@ -176,15 +181,93 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
+	// Get username for reading user details
+	username := plan.Username.ValueString()
+	readPath := fmt.Sprintf("/api/v1/user/%s", username)
+
+	respObj, err = r.client.Get(ctx, readPath)
+	if err != nil {
+		resp.Diagnostics.AddError("API Error Reading User After Create", err.Error())
+		return
+	}
+
 	var result map[string]interface{}
 	if err := respObj.Unmarshal(&result); err != nil {
-		resp.Diagnostics.AddError("Failed to parse response", err.Error())
+		resp.Diagnostics.AddError("Failed to parse user after create", err.Error())
 		return
 	}
 
 	// Extract user info from response
 	if id, ok := result["id"].(float64); ok {
 		plan.ID = types.Int64Value(int64(id))
+	}
+
+	if val, ok := result["first_name"].(string); ok {
+		plan.FirstName = types.StringValue(val)
+	}
+
+	if val, ok := result["last_name"].(string); ok {
+		plan.LastName = types.StringValue(val)
+	}
+
+	if val, ok := result["email"].(string); ok {
+		plan.Email = types.StringValue(val)
+	}
+
+	if val, ok := result["phone"].(string); ok {
+		plan.Phone = types.StringValue(val)
+	}
+
+	if val, ok := result["is_admin"].(bool); ok {
+		plan.IsAdmin = types.BoolValue(val)
+	}
+
+	if val, ok := result["is_active"].(bool); ok {
+		plan.IsActive = types.BoolValue(val)
+	}
+
+	if val, ok := result["enrolled"].(bool); ok {
+		plan.Enrolled = types.BoolValue(val)
+	}
+
+	if val, ok := result["mfa_enabled"].(bool); ok {
+		plan.MFAEnabled = types.BoolValue(val)
+	}
+
+	if val, ok := result["totp_enabled"].(bool); ok {
+		plan.TOTPEnabled = types.BoolValue(val)
+	}
+
+	if val, ok := result["email_mfa_enabled"].(bool); ok {
+		plan.EmailMFAEnabled = types.BoolValue(val)
+	}
+
+	if val, ok := result["mfa_method"].(string); ok {
+		plan.MFAMethod = types.StringValue(val)
+	}
+
+	if val, ok := result["ldap_pass_requires_change"].(bool); ok {
+		plan.LDAPPassRequiresChange = types.BoolValue(val)
+	}
+
+	if val, ok := result["authorized_apps"].([]interface{}); ok {
+		apps := make([]attr.Value, 0, len(val))
+		for _, v := range val {
+			if s, ok := v.(string); ok {
+				apps = append(apps, types.StringValue(s))
+			}
+		}
+		plan.AuthorizedApps = types.ListValueMust(types.StringType, apps)
+	}
+
+	if val, ok := result["groups"].([]interface{}); ok {
+		grps := make([]attr.Value, 0, len(val))
+		for _, v := range val {
+			if s, ok := v.(string); ok {
+				grps = append(grps, types.StringValue(s))
+			}
+		}
+		plan.Groups = types.ListValueMust(types.StringType, grps)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -217,6 +300,78 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	}
 
 	// Update state from response
+	if id, ok := result["id"].(float64); ok {
+		state.ID = types.Int64Value(int64(id))
+	}
+
+	if val, ok := result["first_name"].(string); ok {
+		state.FirstName = types.StringValue(val)
+	}
+
+	if val, ok := result["last_name"].(string); ok {
+		state.LastName = types.StringValue(val)
+	}
+
+	if val, ok := result["email"].(string); ok {
+		state.Email = types.StringValue(val)
+	}
+
+	if val, ok := result["phone"].(string); ok {
+		state.Phone = types.StringValue(val)
+	}
+
+	if val, ok := result["is_admin"].(bool); ok {
+		state.IsAdmin = types.BoolValue(val)
+	}
+
+	if val, ok := result["is_active"].(bool); ok {
+		state.IsActive = types.BoolValue(val)
+	}
+
+	if val, ok := result["enrolled"].(bool); ok {
+		state.Enrolled = types.BoolValue(val)
+	}
+
+	if val, ok := result["mfa_enabled"].(bool); ok {
+		state.MFAEnabled = types.BoolValue(val)
+	}
+
+	if val, ok := result["totp_enabled"].(bool); ok {
+		state.TOTPEnabled = types.BoolValue(val)
+	}
+
+	if val, ok := result["email_mfa_enabled"].(bool); ok {
+		state.EmailMFAEnabled = types.BoolValue(val)
+	}
+
+	if val, ok := result["mfa_method"].(string); ok {
+		state.MFAMethod = types.StringValue(val)
+	}
+
+	if val, ok := result["ldap_pass_requires_change"].(bool); ok {
+		state.LDAPPassRequiresChange = types.BoolValue(val)
+	}
+
+	if val, ok := result["authorized_apps"].([]interface{}); ok {
+		apps := make([]attr.Value, 0, len(val))
+		for _, v := range val {
+			if s, ok := v.(string); ok {
+				apps = append(apps, types.StringValue(s))
+			}
+		}
+		state.AuthorizedApps = types.ListValueMust(types.StringType, apps)
+	}
+
+	if val, ok := result["groups"].([]interface{}); ok {
+		grps := make([]attr.Value, 0, len(val))
+		for _, v := range val {
+			if s, ok := v.(string); ok {
+				grps = append(grps, types.StringValue(s))
+			}
+		}
+		state.Groups = types.ListValueMust(types.StringType, grps)
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -249,10 +404,14 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		"first_name": plan.FirstName.ValueString(),
 		"last_name":  plan.LastName.ValueString(),
 		"email":      plan.Email.ValueString(),
-		"phone":      plan.Phone.ValueString(),
 		"is_admin":   plan.IsAdmin.ValueBool(),
 		"is_active":  plan.IsActive.ValueBool(),
 		"groups":     groups,
+	}
+
+	// Only include phone if it's set
+	if !plan.Phone.IsUnknown() && !plan.Phone.IsNull() && plan.Phone.ValueString() != "" {
+		payload["phone"] = plan.Phone.ValueString()
 	}
 
 	respObj, err := r.client.Put(ctx, path, payload)
@@ -261,10 +420,90 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
+	// Get user details to update state
+	respObj, err = r.client.Get(ctx, path)
+	if err != nil {
+		resp.Diagnostics.AddError("API Error Reading User After Update", err.Error())
+		return
+	}
+
 	var result map[string]interface{}
 	if err := respObj.Unmarshal(&result); err != nil {
-		resp.Diagnostics.AddError("Failed to parse updated user", err.Error())
+		resp.Diagnostics.AddError("Failed to parse user after update", err.Error())
 		return
+	}
+
+	// Extract user info from response
+	if id, ok := result["id"].(float64); ok {
+		plan.ID = types.Int64Value(int64(id))
+	}
+
+	if val, ok := result["first_name"].(string); ok {
+		plan.FirstName = types.StringValue(val)
+	}
+
+	if val, ok := result["last_name"].(string); ok {
+		plan.LastName = types.StringValue(val)
+	}
+
+	if val, ok := result["email"].(string); ok {
+		plan.Email = types.StringValue(val)
+	}
+
+	if val, ok := result["phone"].(string); ok {
+		plan.Phone = types.StringValue(val)
+	}
+
+	if val, ok := result["is_admin"].(bool); ok {
+		plan.IsAdmin = types.BoolValue(val)
+	}
+
+	if val, ok := result["is_active"].(bool); ok {
+		plan.IsActive = types.BoolValue(val)
+	}
+
+	if val, ok := result["enrolled"].(bool); ok {
+		plan.Enrolled = types.BoolValue(val)
+	}
+
+	if val, ok := result["mfa_enabled"].(bool); ok {
+		plan.MFAEnabled = types.BoolValue(val)
+	}
+
+	if val, ok := result["totp_enabled"].(bool); ok {
+		plan.TOTPEnabled = types.BoolValue(val)
+	}
+
+	if val, ok := result["email_mfa_enabled"].(bool); ok {
+		plan.EmailMFAEnabled = types.BoolValue(val)
+	}
+
+	if val, ok := result["mfa_method"].(string); ok {
+		plan.MFAMethod = types.StringValue(val)
+	}
+
+	if val, ok := result["ldap_pass_requires_change"].(bool); ok {
+		plan.LDAPPassRequiresChange = types.BoolValue(val)
+	}
+
+	if val, ok := result["authorized_apps"].([]interface{}); ok {
+		apps := make([]attr.Value, 0, len(val))
+		for _, v := range val {
+			if s, ok := v.(string); ok {
+				apps = append(apps, types.StringValue(s))
+			}
+		}
+		plan.AuthorizedApps = types.ListValueMust(types.StringType, apps)
+	}
+
+	if val, ok := result["groups"].([]interface{}); ok {
+		grps := make([]attr.Value, 0, len(val))
+		for _, v := range val {
+			if s, ok := v.(string); ok {
+				grps = append(grps, types.StringValue(s))
+			}
+		}
+		plan.Groups = types.ListValueMust(types.StringType, grps)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)

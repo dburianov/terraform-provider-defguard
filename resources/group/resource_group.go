@@ -4,11 +4,13 @@ import (
 	"context"
 	"log"
 
+	"terraform-provider-defguard/internal/client"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func resourceGroup() *schema.Resource {
+func ResourceGroup() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceGroupCreate,
 		ReadContext:   resourceGroupRead,
@@ -17,56 +19,55 @@ func resourceGroup() *schema.Resource {
 		Importer: &schema.ResourceImporter{
 			StateContext: schema.ImportStatePassthroughContext,
 		},
-		Schema: resourceGroupSchema().Schema,
+		Schema: resourceGroupSchema(),
 	}
 }
 
 func resourceGroupCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	log.Printf("[DEBUG] Creating group")
 
-	// Prepare the group data
-	groupData := map[string]interface{}{
-		"name":          d.Get("name").(string),
-		"is_admin":      d.Get("is_admin").(bool),
-		"members":       d.Get("members").(*schema.Set).List(),
-		"vpn_locations": d.Get("vpn_locations").(*schema.Set).List(),
+	client, ok := meta.(*client.Client)
+	if !ok {
+		return diag.Errorf("invalid client type")
 	}
 
-	// Make API call to create group
-	// This is a placeholder - actual implementation would make HTTP requests
-	// to the defguard API endpoints
+	// Prepare the group data
+	groupData := map[string]interface{}{
+		"name":     d.Get("name").(string),
+		"is_admin": d.Get("is_admin").(bool),
+		"members":  d.Get("members").([]interface{}),
+	}
+
+	_, err := client.Post(ctx, "/api/v1/group", groupData)
+	if err != nil {
+		return diag.Errorf("failed to create group: %v", err)
+	}
+
 	log.Printf("[DEBUG] Creating group with data: %+v", groupData)
 
-	// For now, just simulate the creation
-	// In a real implementation, we would:
-	// 1. Make HTTP POST request to /api/v1/group
-	// 2. Parse the response
-	// 3. Set the ID and other computed fields
+	// Set the ID from name (since we don't get it back from API in this flow)
+	d.SetId(d.Get("name").(string))
 
-	// Set the ID (in real implementation, this would come from API response)
-	d.SetId("12345")
-
-	// Read the group to populate all fields
 	return resourceGroupRead(ctx, d, meta)
 }
 
 func resourceGroupRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	log.Printf("[DEBUG] Reading group")
 
-	// In a real implementation, we would:
-	// 1. Make HTTP GET request to /api/v1/group/{name}
-	// 2. Parse the response
-	// 3. Set all the fields in the Terraform state
-
-	// For now, we'll just return the current state
-	name := d.Get("name").(string)
-	log.Printf("[DEBUG] Reading group with name: %s", name)
-
-	// In a real implementation, we would set the fields from the API response
-	// For now, just simulate that we read the group successfully
-	if err := d.Set("name", name); err != nil {
-		return diag.FromErr(err)
+	client, ok := meta.(*client.Client)
+	if !ok {
+		return diag.Errorf("invalid client type")
 	}
+
+	groupID := d.Id()
+	log.Printf("[DEBUG] Reading group with ID: %s", groupID)
+
+	resp, err := client.Get(ctx, "/api/v1/group-info")
+	if err != nil {
+		return diag.Errorf("failed to read group: %v", err)
+	}
+
+	log.Printf("[DEBUG] Read group response: %s", string(resp.Body))
 
 	return nil
 }
@@ -74,42 +75,46 @@ func resourceGroupRead(ctx context.Context, d *schema.ResourceData, meta interfa
 func resourceGroupUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	log.Printf("[DEBUG] Updating group")
 
-	// Prepare the group data for update
-	groupData := map[string]interface{}{
-		"name":          d.Get("name").(string),
-		"is_admin":      d.Get("is_admin").(bool),
-		"members":       d.Get("members").(*schema.Set).List(),
-		"vpn_locations": d.Get("vpn_locations").(*schema.Set).List(),
+	client, ok := meta.(*client.Client)
+	if !ok {
+		return diag.Errorf("invalid client type")
 	}
 
-	// Make API call to update group
-	// This is a placeholder - actual implementation would make HTTP requests
-	// to the defguard API endpoints
+	groupID := d.Id()
+
+	// Prepare the group data for update
+	groupData := map[string]interface{}{
+		"name":     d.Get("name").(string),
+		"is_admin": d.Get("is_admin").(bool),
+		"members":  d.Get("members").([]interface{}),
+	}
+
+	_, err := client.Put(ctx, "/api/v1/group/"+groupID, groupData)
+	if err != nil {
+		return diag.Errorf("failed to update group: %v", err)
+	}
+
 	log.Printf("[DEBUG] Updating group with data: %+v", groupData)
 
-	// In a real implementation, we would:
-	// 1. Make HTTP PUT request to /api/v1/group/{name}
-	// 2. Parse the response
-	// 3. Update the Terraform state
-
-	return nil
+	return resourceGroupRead(ctx, d, meta)
 }
 
 func resourceGroupDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	log.Printf("[DEBUG] Deleting group")
 
-	// Make API call to delete group
-	// This is a placeholder - actual implementation would make HTTP requests
-	// to the defguard API endpoints
-	name := d.Get("name").(string)
-	log.Printf("[DEBUG] Deleting group with name: %s", name)
+	client, ok := meta.(*client.Client)
+	if !ok {
+		return diag.Errorf("invalid client type")
+	}
 
-	// In a real implementation, we would:
-	// 1. Make HTTP DELETE request to /api/v1/group/{name}
-	// 2. Handle any errors
-	// 3. Clear the ID from Terraform state
+	groupID := d.Id()
+	log.Printf("[DEBUG] Deleting group with ID: %s", groupID)
 
-	// Clear the ID so Terraform knows the resource is deleted
+	_, err := client.Delete(ctx, "/api/v1/group/"+groupID, nil)
+	if err != nil {
+		return diag.Errorf("failed to delete group: %v", err)
+	}
+
 	d.SetId("")
 
 	return nil

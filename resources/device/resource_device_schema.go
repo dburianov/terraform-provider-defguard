@@ -7,6 +7,11 @@ import (
 func resourceDeviceSchema() *schema.Resource {
 	return &schema.Resource{
 		Schema: map[string]*schema.Schema{
+			"id": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "The ID of the device",
+			},
 			"name": {
 				Type:        schema.TypeString,
 				Required:    true,
@@ -15,44 +20,38 @@ func resourceDeviceSchema() *schema.Resource {
 			"wireguard_pubkey": {
 				Type:        schema.TypeString,
 				Required:    true,
-				Description: "The WireGuard public key of the device",
+				Description: "The WireGuard public key",
 			},
 			"user_id": {
 				Type:        schema.TypeInt,
 				Optional:    true,
-				Description: "The ID of the user that owns the device",
+				Description: "The user ID that owns the device",
 			},
 			"username": {
 				Type:        schema.TypeString,
 				Optional:    true,
-				Description: "The username of the user that owns the device",
+				Description: "The username of the device owner",
 			},
 			"description": {
 				Type:        schema.TypeString,
 				Optional:    true,
-				Description: "Description of the device",
+				Description: "Device description",
 			},
 			"configured": {
 				Type:        schema.TypeBool,
 				Optional:    true,
-				Default:     true,
-				Description: "Whether the device is configured",
+				Default:     false,
+				Description: "Whether the device is configured and ready to use",
 			},
 			"device_type": {
 				Type:        schema.TypeString,
-				Optional:    true,
-				Default:     "user",
+				Computed:    true,
 				Description: "The type of device (user or network)",
 			},
 			"created": {
 				Type:        schema.TypeString,
 				Computed:    true,
-				Description: "The creation timestamp of the device",
-			},
-			"id": {
-				Type:        schema.TypeInt,
-				Computed:    true,
-				Description: "The ID of the device",
+				Description: "Creation timestamp",
 			},
 		},
 	}

@@ -3,6 +3,13 @@ package provider
 import (
 	"context"
 
+	userDataSource "terraform-provider-defguard/data-sources/user"
+	device "terraform-provider-defguard/resources/device"
+	group "terraform-provider-defguard/resources/group"
+	userResource "terraform-provider-defguard/resources/user"
+
+	"terraform-provider-defguard/internal/client"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -12,9 +19,16 @@ func Provider() *schema.Provider {
 		Schema: map[string]*schema.Schema{
 			"api_token": {
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				Description: "API token for authentication",
 				DefaultFunc: schema.EnvDefaultFunc("DEFGUARD_API_TOKEN", nil),
+			},
+			"session": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Sensitive:   true,
+				Description: "Session cookie for authentication",
+				DefaultFunc: schema.EnvDefaultFunc("DEFGUARD_SESSION_COOKIE", nil),
 			},
 			"base_url": {
 				Type:        schema.TypeString,
@@ -24,12 +38,12 @@ func Provider() *schema.Provider {
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
-			"defguard_user":   &schema.Resource{},
-			"defguard_group":  &schema.Resource{},
-			"defguard_device": &schema.Resource{},
+			"defguard_user":   userResource.ResourceUser(),
+			"defguard_group":  group.ResourceGroup(),
+			"defguard_device": device.ResourceDevice(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
-			"defguard_user": &schema.Resource{},
+			"defguard_user": userDataSource.DataSourceUser(),
 		},
 		ConfigureContextFunc: providerConfigure,
 	}
@@ -40,6 +54,7 @@ func providerConfigure(ctx context.Context, d *schema.ResourceData) (interface{}
 
 	baseURL := d.Get("base_url").(string)
 	apiToken := d.Get("api_token").(string)
+	sessionCookie := d.Get("session").(string)
 
 	if baseURL == "" {
 		diags = append(diags, diag.Diagnostic{
@@ -50,26 +65,17 @@ func providerConfigure(ctx context.Context, d *schema.ResourceData) (interface{}
 		return nil, diags
 	}
 
-	if apiToken == "" {
+	if apiToken == "" && sessionCookie == "" {
 		diags = append(diags, diag.Diagnostic{
 			Severity: diag.Error,
-			Summary:  "API token is required",
-			Detail:   "API token must be provided for defguard API",
+			Summary:  "Authentication is required",
+			Detail:   "API token or session cookie must be provided for defguard API",
 		})
 		return nil, diags
 	}
 
 	// Create API client with the provided configuration
-	config := &Config{
-		BaseURL:  baseURL,
-		APIToken: apiToken,
-	}
+	client := client.NewClient(baseURL, apiToken, sessionCookie)
 
-	return config, diags
-}
-
-// Config holds the provider configuration
-type Config struct {
-	BaseURL  string
-	APIToken string
+	return client, diags
 }

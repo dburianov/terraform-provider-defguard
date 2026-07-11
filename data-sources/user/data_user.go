@@ -4,11 +4,13 @@ import (
 	"context"
 	"log"
 
+	"terraform-provider-defguard/internal/client"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func dataSourceUser() *schema.Resource {
+func DataSourceUser() *schema.Resource {
 	return &schema.Resource{
 		ReadContext: dataSourceUserRead,
 		Schema: map[string]*schema.Schema{
@@ -17,7 +19,6 @@ func dataSourceUser() *schema.Resource {
 				Required:    true,
 				Description: "The username of the user to retrieve",
 			},
-			// Add other computed fields as needed
 			"id": {
 				Type:        schema.TypeInt,
 				Computed:    true,
@@ -30,13 +31,21 @@ func dataSourceUser() *schema.Resource {
 func dataSourceUserRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	log.Printf("[DEBUG] Reading user data source")
 
-	// In a real implementation, we would:
-	// 1. Make HTTP GET request to /api/v1/user/{username}
-	// 2. Parse the response
-	// 3. Set all the fields in the Terraform state
+	client, ok := meta.(*client.Client)
+	if !ok {
+		return diag.Errorf("invalid client type")
+	}
 
-	// For now, just simulate that we read the user successfully
 	username := d.Get("username").(string)
+	log.Printf("[DEBUG] Reading user with username: %s", username)
+
+	resp, err := client.Get(ctx, "/api/v1/user/"+username)
+	if err != nil {
+		return diag.Errorf("failed to read user: %v", err)
+	}
+
+	log.Printf("[DEBUG] Read user response: %s", string(resp.Body))
+
 	d.SetId(username)
 
 	return nil

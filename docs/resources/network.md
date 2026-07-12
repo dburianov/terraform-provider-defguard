@@ -27,17 +27,17 @@ resource "defguard_network" "main" {
 
 - `id` (Int64, Computed) - Network ID
 - `name` (String, Required) - Network name
-- `address` (String, Required) - Network address
+- `address` (String, Required) - Network address (CIDR format)
 - `port` (Int64, Required) - Network port
 - `pubkey` (String, Required) - Network public key (requires replace on update)
 - `endpoint` (String, Required) - Network endpoint
-- `allowed_ips` (String, Required) - Allowed IP ranges
+- `allowed_ips` (String, Required) - Allowed IP ranges (CIDR format, comma-separated)
 - `allowed_groups` (List of Strings, Required) - Groups allowed to connect
 - `dns` (String, Optional) - DNS server
 - `keepalive_interval` (Int64, Required) - Keepalive interval in seconds
 - `peer_disconnect_threshold` (Int64, Required) - Peer disconnect threshold in seconds
 - `acl_enabled` (Bool, Required) - Whether ACL is enabled
 - `acl_default_allow` (Bool, Required) - Default ACL behavior (allow or deny)
-- `location_mfa_mode` (String, Required) - MFA mode for locations
-- `service_location_mode` (String, Required) - Service location mode
+- `location_mfa_mode` (String, Required) - MFA mode for locations (disabled, internal, external)
+- `service_location_mode` (String, Required) - Service location mode (disabled, prelogon, alwayson)
 - `connected` (Bool, Computed) - Whether the gateway is connected

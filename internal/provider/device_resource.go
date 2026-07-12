@@ -26,6 +26,9 @@ type DeviceResourceModel struct {
 	UserID          types.Int64  `tfsdk:"user_id"`
 	WireguardPubkey types.String `tfsdk:"wireguard_pubkey"`
 	Created         types.String `tfsdk:"created"`
+	DeviceType      types.String `tfsdk:"device_type"`
+	Configured      types.Bool   `tfsdk:"configured"`
+	Description     types.String `tfsdk:"description"`
 	UserIDValue     types.Int64  `tfsdk:"-"`
 }
 
@@ -67,6 +70,19 @@ func (r *DeviceResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Computed:    true,
 				Description: "Creation timestamp",
 			},
+			"device_type": schema.StringAttribute{
+				Computed:    true,
+				Description: "Device type (user or network)",
+			},
+			"configured": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the device is configured and ready to use",
+			},
+			"description": schema.StringAttribute{
+				Optional:    true,
+				Computed:    true,
+				Description: "Device description",
+			},
 		},
 	}
 }
@@ -99,9 +115,10 @@ func (r *DeviceResource) Create(ctx context.Context, req resource.CreateRequest,
 	payload := map[string]interface{}{
 		"name":             plan.Name.ValueString(),
 		"wireguard_pubkey": plan.WireguardPubkey.ValueString(),
+		"description":      nilIfUnknown(plan.Description),
 	}
 
-	// Add user_id to the path
+	// Add user_id to the path using username
 	username := fmt.Sprintf("user_%d", plan.UserID.ValueInt64())
 	devicePath := fmt.Sprintf("/api/v1/device/%s", username)
 
@@ -112,7 +129,6 @@ func (r *DeviceResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	// Parse response - the API returns AddDeviceResult with device inside
-	// For now, we'll just use the device object
 	var result map[string]interface{}
 	if err := respObj.Unmarshal(&result); err != nil {
 		resp.Diagnostics.AddError("Failed to parse response", err.Error())
@@ -132,6 +148,15 @@ func (r *DeviceResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 	if created, ok := deviceMap["created"].(string); ok {
 		plan.Created = types.StringValue(created)
+	}
+	if deviceType, ok := deviceMap["device_type"].(string); ok {
+		plan.DeviceType = types.StringValue(deviceType)
+	}
+	if configured, ok := deviceMap["configured"].(bool); ok {
+		plan.Configured = types.BoolValue(configured)
+	}
+	if description, ok := deviceMap["description"].(string); ok && description != "" {
+		plan.Description = types.StringValue(description)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
@@ -157,13 +182,30 @@ func (r *DeviceResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	var device DeviceResourceModel
-	if err := respObj.Unmarshal(&device); err != nil {
+	var result map[string]interface{}
+	if err := respObj.Unmarshal(&result); err != nil {
 		resp.Diagnostics.AddError("Failed to parse device", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, &device)...)
+	// Update state from response
+	if id, ok := result["id"].(float64); ok {
+		state.ID = types.Int64Value(int64(id))
+	}
+	if created, ok := result["created"].(string); ok {
+		state.Created = types.StringValue(created)
+	}
+	if deviceType, ok := result["device_type"].(string); ok {
+		state.DeviceType = types.StringValue(deviceType)
+	}
+	if configured, ok := result["configured"].(bool); ok {
+		state.Configured = types.BoolValue(configured)
+	}
+	if description, ok := result["description"].(string); ok && description != "" {
+		state.Description = types.StringValue(description)
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 func (r *DeviceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -176,10 +218,11 @@ func (r *DeviceResource) Update(ctx context.Context, req resource.UpdateRequest,
 	deviceID := plan.ID.ValueInt64()
 	devicePath := fmt.Sprintf("/api/v1/device/%d", deviceID)
 
-	// Create update payload
+	// Create update payload based on OpenAPI ModifyDevice schema
 	payload := map[string]interface{}{
 		"name":             plan.Name.ValueString(),
 		"wireguard_pubkey": plan.WireguardPubkey.ValueString(),
+		"description":      nilIfUnknown(plan.Description),
 	}
 
 	respObj, err := r.client.Put(ctx, devicePath, payload)
@@ -188,13 +231,30 @@ func (r *DeviceResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	var device DeviceResourceModel
-	if err := respObj.Unmarshal(&device); err != nil {
+	var result map[string]interface{}
+	if err := respObj.Unmarshal(&result); err != nil {
 		resp.Diagnostics.AddError("Failed to parse updated device", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, &device)...)
+	// Update state from response
+	if id, ok := result["id"].(float64); ok {
+		plan.ID = types.Int64Value(int64(id))
+	}
+	if created, ok := result["created"].(string); ok {
+		plan.Created = types.StringValue(created)
+	}
+	if deviceType, ok := result["device_type"].(string); ok {
+		plan.DeviceType = types.StringValue(deviceType)
+	}
+	if configured, ok := result["configured"].(bool); ok {
+		plan.Configured = types.BoolValue(configured)
+	}
+	if description, ok := result["description"].(string); ok && description != "" {
+		plan.Description = types.StringValue(description)
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *DeviceResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

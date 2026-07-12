@@ -64,7 +64,7 @@ func (r *NetworkResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"address": schema.StringAttribute{
 				Required:    true,
-				Description: "Network address",
+				Description: "Network address (CIDR format)",
 			},
 			"port": schema.Int64Attribute{
 				Required:    true,
@@ -83,7 +83,7 @@ func (r *NetworkResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"allowed_ips": schema.StringAttribute{
 				Required:    true,
-				Description: "Allowed IP ranges",
+				Description: "Allowed IP ranges (CIDR format, comma-separated)",
 			},
 			"allowed_groups": schema.ListAttribute{
 				Required:    true,
@@ -157,7 +157,7 @@ func (r *NetworkResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	// Create network payload based on OpenAPI schema
+	// Create network payload based on OpenAPI WireguardNetworkData schema
 	payload := map[string]interface{}{
 		"name":                      plan.Name.ValueString(),
 		"address":                   plan.Address.ValueString(),
@@ -166,7 +166,7 @@ func (r *NetworkResource) Create(ctx context.Context, req resource.CreateRequest
 		"endpoint":                  plan.Endpoint.ValueString(),
 		"allowed_ips":               plan.AllowedIPs.ValueString(),
 		"allowed_groups":            allowedGroups,
-		"dns":                       plan.DNS.ValueString(),
+		"dns":                       nilIfUnknown(plan.DNS),
 		"keepalive_interval":        plan.KeepaliveInterval.ValueInt64(),
 		"peer_disconnect_threshold": plan.PeerDisconnectThreshold.ValueInt64(),
 		"acl_enabled":               plan.ACLEnabled.ValueBool(),
@@ -222,6 +222,10 @@ func (r *NetworkResource) Read(ctx context.Context, req resource.ReadRequest, re
 	}
 
 	// Update state from response
+	if id, ok := result["id"].(float64); ok {
+		state.ID = types.Int64Value(int64(id))
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -248,7 +252,7 @@ func (r *NetworkResource) Update(ctx context.Context, req resource.UpdateRequest
 	networkID := plan.ID.ValueInt64()
 	path := fmt.Sprintf("/api/v1/network/%d", networkID)
 
-	// Create update payload
+	// Create update payload based on OpenAPI WireguardNetworkData schema
 	payload := map[string]interface{}{
 		"name":                      plan.Name.ValueString(),
 		"address":                   plan.Address.ValueString(),
@@ -257,7 +261,7 @@ func (r *NetworkResource) Update(ctx context.Context, req resource.UpdateRequest
 		"endpoint":                  plan.Endpoint.ValueString(),
 		"allowed_ips":               plan.AllowedIPs.ValueString(),
 		"allowed_groups":            allowedGroups,
-		"dns":                       plan.DNS.ValueString(),
+		"dns":                       nilIfUnknown(plan.DNS),
 		"keepalive_interval":        plan.KeepaliveInterval.ValueInt64(),
 		"peer_disconnect_threshold": plan.PeerDisconnectThreshold.ValueInt64(),
 		"acl_enabled":               plan.ACLEnabled.ValueBool(),

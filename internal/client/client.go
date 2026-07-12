@@ -7,23 +7,90 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
+	"os"
+	"strings"
 	"time"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // Client represents the Defguard API client
 type Client struct {
-	baseURL    string
-	apiToken   string
-	httpClient *http.Client
+	baseURL            string
+	apiToken           string
+	session            string // Session cookie name (default: "defguard_session")
+	sessionCookieValue string // Session cookie value (for direct header setting)
+	httpClient         *http.Client
 }
 
 // NewClient creates a new Defguard API client
 func NewClient(endpoint string, apiToken string) *Client {
+	cookieJar, _ := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
+
 	return &Client{
-		baseURL:    endpoint,
-		apiToken:   apiToken,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		baseURL:  endpoint,
+		apiToken: apiToken,
+		session:  "defguard_session",
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+			Jar:     cookieJar,
+		},
 	}
+}
+
+// SetSessionCookie sets the session cookie name
+func (c *Client) SetSessionCookie(name string) {
+	c.session = name
+}
+
+// SetSessionValue sets an existing session cookie value directly
+func (c *Client) SetSessionValue(value string) error {
+	parsedURL, err := url.Parse(c.baseURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse baseURL: %w", err)
+	}
+
+	c.sessionCookieValue = value
+
+	cookie := &http.Cookie{
+		Name:   c.session,
+		Value:  value,
+		Path:   "/",
+		Domain: parsedURL.Hostname(),
+	}
+
+	c.httpClient.Jar.SetCookies(parsedURL, []*http.Cookie{cookie})
+	return nil
+}
+
+// LoginResult represents the response from the auth endpoint
+type LoginResult struct {
+	Token   string `json:"token"`
+	Message string `json:"msg"`
+}
+
+// LoginWithCredentials authenticates with the Defguard API using username and password
+func (c *Client) LoginWithCredentials(ctx context.Context, username, password string) (*LoginResult, error) {
+	payload := map[string]string{
+		"username": username,
+		"password": password,
+	}
+
+	respObj, err := c.Post(ctx, "/api/v1/auth", payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to login: %w", err)
+	}
+
+	var result LoginResult
+	if err := respObj.Unmarshal(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse login response: %w", err)
+	}
+
+	return &result, nil
 }
 
 // Request is a generic request structure
@@ -43,7 +110,11 @@ type Response struct {
 
 // doRequest performs an HTTP request to the Defguard API
 func (c *Client) doRequest(ctx context.Context, req Request) (*Response, error) {
-	url := fmt.Sprintf("%s%s", c.baseURL, req.Path)
+	requestURL := fmt.Sprintf("%s%s", c.baseURL, req.Path)
+
+	fmt.Fprintf(os.Stderr, "DEBUG doRequest: baseURL=%s, path=%s\n", c.baseURL, req.Path)
+	fmt.Fprintf(os.Stderr, "DEBUG requestURL=%s\n", requestURL)
+	fmt.Fprintf(os.Stderr, "DEBUG doRequest: %s %s\n", req.Method, requestURL)
 
 	var bodyReader io.Reader
 	if req.Body != nil {
@@ -52,17 +123,56 @@ func (c *Client) doRequest(ctx context.Context, req Request) (*Response, error) 
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
 		bodyReader = bytes.NewReader(jsonBody)
+		fmt.Fprintf(os.Stderr, "DEBUG Request body: %s\n", string(jsonBody))
+	} else {
+		fmt.Fprintf(os.Stderr, "DEBUG Request body is nil\n")
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, req.Method, url, bodyReader)
+	httpReq, err := http.NewRequestWithContext(ctx, req.Method, requestURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
 
+	// Add session cookie directly to request headers if set (takes precedence over cookiejar)
 	if c.apiToken != "" {
 		httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiToken))
+		fmt.Fprintf(os.Stderr, "DEBUG Using Authorization header: Bearer %s...\n", c.apiToken[:20])
+	} else if c.sessionCookieValue != "" {
+		// Use the cookiejar to add cookies instead of manually setting header
+		// This ensures proper cookie handling by Go's HTTP client
+		parsedURL, err := url.Parse(c.baseURL)
+		if err == nil {
+			cookies := []*http.Cookie{{Name: c.session, Value: c.sessionCookieValue, Path: "/", Domain: parsedURL.Hostname()}}
+			c.httpClient.Jar.SetCookies(parsedURL, cookies)
+			fmt.Fprintf(os.Stderr, "DEBUG Added cookie to jar: %s=...\n", c.session)
+		}
+
+		// Get cookies that will be sent
+		jarCookies := c.httpClient.Jar.Cookies(httpReq.URL)
+		if len(jarCookies) > 0 {
+			var cookieStrings []string
+			for _, cookie := range jarCookies {
+				cookieStrings = append(cookieStrings, fmt.Sprintf("%s=%s", cookie.Name, cookie.Value))
+			}
+			fmt.Fprintf(os.Stderr, "DEBUG Cookies to send: %s\n", strings.Join(cookieStrings, "; "))
+		}
+
+		// Set Cookie header directly for debugging (so we can see it in headers output)
+		if c.sessionCookieValue != "" {
+			cookieHeader := fmt.Sprintf("%s=%s", c.session, c.sessionCookieValue)
+			httpReq.Header.Set("Cookie", cookieHeader)
+			fmt.Fprintf(os.Stderr, "DEBUG Setting Cookie header: %s\n", cookieHeader)
+		}
+	}
+
+	// Log all headers being sent
+	fmt.Fprintf(os.Stderr, "DEBUG Headers being sent:\n")
+	for k, v := range httpReq.Header {
+		if len(v) > 0 {
+			fmt.Fprintf(os.Stderr, "  %s: %v\n", k, v[0])
+		}
 	}
 
 	resp, err := c.httpClient.Do(httpReq)

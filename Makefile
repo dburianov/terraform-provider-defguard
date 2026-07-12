@@ -1,3 +1,4 @@
+# Default target
 default: build
 
 # Build the provider
@@ -41,8 +42,30 @@ dev-build:
 
 # Install for local development
 dev-install: dev-build
-	go build -o terraform-provider-defguard
 	mkdir -p ~/.terraform.d/plugins/registry.terraform.io/dburianov/defguard/0.0.1/linux_amd64
 	cp terraform-provider-defguard ~/.terraform.d/plugins/registry.terraform.io/dburianov/defguard/0.0.1/linux_amd64/
 
-.PHONY: build install test testacc fmt vet clean docs check dev-build dev-install
+# Deploy to dev (prod folder)
+deploy-dev: build
+	./scripts/deploy-dev.sh
+
+# Deploy to prod environment
+deploy-prod:
+	@echo "Deploying to prod..."
+	TF_LOG=INFO terraform -chdir=prod apply -auto-approve
+
+# Validate terraform configuration in prod
+validate:
+	terraform -chdir=prod validate
+
+# Run E2E tests from prod folder
+test-e2e: build
+	./scripts/test.sh
+
+# Dev setup with environment variables
+dev-setup:
+	@echo "Set up the following environment variables for development:"
+	@echo "  export DEFGUARD_ENDPOINT=https://dev.vpn.ddsc.ai"
+	@echo "  export DEFGUARD_COOKIE=your-cookie-here"
+
+.PHONY: build install test testacc fmt vet clean docs check dev-build dev-install deploy-dev deploy-prod validate test-e2e dev-setup

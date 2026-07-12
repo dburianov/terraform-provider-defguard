@@ -27,6 +27,9 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
 
+      - name: Write GPG passphrase to file
+        run: echo "${{ secrets.PASSPHRASE }}" > /tmp/gpg_passphrase.txt
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -35,4 +38,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
-          GPG_PASSPHRASE: ${{ secrets.PASSPHRASE }}
+          GPG_PASSPHRASE_FILE: /tmp/gpg_passphrase.txt
+
+      - name: Clean up passphrase file
+        if: always()
+        run: rm -f /tmp/gpg_passphrase.txt
+

@@ -29,6 +29,8 @@ jobs:
 
       - name: Import GPG key
         id: import_gpg
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
           echo "$GPG_PRIVATE_KEY" | gpg --batch --import
 
@@ -42,7 +44,9 @@ jobs:
           echo "fingerprint=$FINGERPRINT" >> $GITHUB_OUTPUT
 
       - name: Write GPG passphrase to file
-        run: echo "${{ secrets.PASSPHRASE }}" > /tmp/gpg_passphrase.txt
+        env:
+          PASSPHRASE: ${{ secrets.PASSPHRASE }}
+        run: echo "$PASSPHRASE" > /tmp/gpg_passphrase.txt
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6

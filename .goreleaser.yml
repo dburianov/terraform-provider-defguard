@@ -58,7 +58,9 @@ signs:
       - loopback
       - --passphrase-file
       - "{{ .Env.GPG_PASSPHRASE_FILE }}"
-
+    artifacts:
+      - checksum
+      - all
 
 release:
   extra_files:

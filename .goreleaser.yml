@@ -38,13 +38,17 @@ checksum:
 signs:
   - artifacts: checksum
     args:
-      - --batch
-      - --yes
-      - --pinentry-mode
-      - loopback
-      - --passphrase-file
+      - "--batch"
+      - "--pinentry-mode"
+      - "loopback"
+      - "--passphrase-file"
       - "{{ .Env.GPG_PASSPHRASE_FILE }}"
-    artifacts: checksum
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
 
 release:
   extra_files:

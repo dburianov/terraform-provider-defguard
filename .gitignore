@@ -58,3 +58,7 @@ gl-*-report.json
 # Dev and test resources
 test/
 terraform-provider*
+
+prod/
+.continue/
+*_

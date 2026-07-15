@@ -204,35 +204,44 @@ func (r *GroupResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 
 	groupName := state.Name.ValueString()
-	path := fmt.Sprintf("/api/v1/group/%s", groupName)
 
-	respObj, err := r.client.Get(ctx, path)
+	respObj, err := r.client.Get(ctx, "/api/v1/group-info")
 	if err != nil {
-		if respObj != nil && respObj.StatusCode == 404 {
-			resp.State.RemoveResource(ctx)
-			return
-		}
 		resp.Diagnostics.AddError("API Error Reading Group", err.Error())
 		return
 	}
 
-	var result map[string]interface{}
-	if err := respObj.Unmarshal(&result); err != nil {
-		resp.Diagnostics.AddError("Failed to parse group", err.Error())
+	var groups []map[string]interface{}
+	if err := respObj.Unmarshal(&groups); err != nil {
+		resp.Diagnostics.AddError("Failed to parse group info", err.Error())
+		return
+	}
+
+	// Find the group by name in the list of all groups
+	var groupInfo map[string]interface{}
+	for _, g := range groups {
+		if name, ok := g["name"].(string); ok && name == groupName {
+			groupInfo = g
+			break
+		}
+	}
+
+	if groupInfo == nil {
+		resp.Diagnostics.AddError("Group Not Found", fmt.Sprintf("Group '%s' not found", groupName))
 		return
 	}
 
 	// Update state from response
-	if id, ok := result["id"].(float64); ok {
+	if id, ok := groupInfo["id"].(float64); ok {
 		state.ID = types.Int64Value(int64(id))
 	}
-	if name, ok := result["name"].(string); ok {
+	if name, ok := groupInfo["name"].(string); ok {
 		state.Name = types.StringValue(name)
 	}
-	if isAdmin, ok := result["is_admin"].(bool); ok {
+	if isAdmin, ok := groupInfo["is_admin"].(bool); ok {
 		state.IsAdmin = types.BoolValue(isAdmin)
 	}
-	if locationsRaw, ok := result["vpn_locations"].([]interface{}); ok {
+	if locationsRaw, ok := groupInfo["vpn_locations"].([]interface{}); ok {
 		var vpnLocations []attr.Value
 		for _, loc := range locationsRaw {
 			if locStr, ok := loc.(string); ok {
@@ -392,6 +401,45 @@ func (r *GroupResource) findGroupByName(ctx context.Context, name string) map[st
 		if groupName, ok := g["name"].(string); ok && groupName == name {
 			return g
 		}
+	}
+
+	return nil
+}
+
+// RemoveUserFromGroupRequest represents the request body for removing a user from a group
+type RemoveUserFromGroupRequest struct {
+	Username string `json:"username"`
+}
+
+// removeUserFromGroup removes a user from a group by group ID and username
+func (r *GroupResource) removeUserFromGroup(ctx context.Context, groupID int64, username string) error {
+	path := fmt.Sprintf("/api/v1/group/%d/user/%s", groupID, username)
+	_, err := r.client.Delete(ctx, path, nil)
+	if err != nil {
+		return fmt.Errorf("failed to remove user %s from group %d: %w", username, groupID, err)
+	}
+	return nil
+}
+
+// AddGroupMemberRequest represents the request body for adding a user to a group
+type AddGroupMemberRequest struct {
+	Username string `json:"username"`
+}
+
+// addGroupMember adds a user to a group by group ID and username
+func (r *GroupResource) addGroupMember(ctx context.Context, groupID int64, username string) error {
+	path := fmt.Sprintf("/api/v1/group/%d/user/%s", groupID, username)
+	payload := map[string]interface{}{
+		"username": username,
+	}
+	respObj, err := r.client.Post(ctx, path, payload)
+	if err != nil {
+		return fmt.Errorf("failed to add user %s to group %d: %w", username, groupID, err)
+	}
+
+	var result map[string]interface{}
+	if err := respObj.Unmarshal(&result); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	return nil

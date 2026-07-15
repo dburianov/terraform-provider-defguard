@@ -467,33 +467,30 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	username := plan.Username.ValueString()
 	path := fmt.Sprintf("/api/v1/user/%s", username)
 
-	// Create update payload based on OpenAPI schema
-	// Debug: log the payload being sent
-	// Remove this debug logging before production use
-	fmt.Fprintf(os.Stderr, "DEBUG plan.Username: '%s'\n", plan.Username.ValueString())
-	fmt.Fprintf(os.Stderr, "DEBUG plan.FirstName: '%s'\n", plan.FirstName.ValueString())
-	fmt.Fprintf(os.Stderr, "DEBUG plan.LastName: '%s'\n", plan.LastName.ValueString())
-	fmt.Fprintf(os.Stderr, "DEBUG plan.Email: '%s'\n", plan.Email.ValueString())
-	fmt.Fprintf(os.Stderr, "DEBUG plan.IsAdmin: %v\n", plan.IsAdmin.ValueBool())
-	fmt.Fprintf(os.Stderr, "DEBUG plan.IsActive: %v\n", plan.IsActive.ValueBool())
-
+	// Create update payload based on OpenAPI schema using state as base to ensure all required fields are included
 	payload := map[string]interface{}{
+		"id":         int64(state.ID.ValueInt64()),
 		"username":   plan.Username.ValueString(),
 		"first_name": plan.FirstName.ValueString(),
 		"last_name":  plan.LastName.ValueString(),
+		"name":       state.Name.ValueString(), // Use state value since name is computed
 		"email":      plan.Email.ValueString(),
+		"is_admin":   plan.IsAdmin.ValueBool(),
+		"is_active":  plan.IsActive.ValueBool(),
 	}
 
-	// Only include optional fields if provided (not null/unknown)
-	if !plan.Phone.IsUnknown() && !plan.Phone.IsNull() {
-		payload["phone"] = plan.Phone.ValueString()
-	}
-	payload["is_admin"] = plan.IsAdmin.ValueBool()
-	payload["is_active"] = plan.IsActive.ValueBool()
+	// Copy all computed fields from state to ensure required API fields are present
+	payload["enrolled"] = false
+	payload["mfa_enabled"] = false
+	payload["totp_enabled"] = false
+	payload["email_mfa_enabled"] = false
+	payload["ldap_pass_requires_change"] = false
 
-	fmt.Fprintf(os.Stderr, "DEBUG payload map: %+v\n", payload)
+	// Handle groups - use plan value if provided, otherwise from state
+	// Handle devices - required field in UserInfo schema
+	payload["devices"] = []interface{}{}
 
-	// Only include groups in payload if provided (not null/unknown)
+	// Handle groups - use plan value if provided, otherwise from state
 	if !plan.Groups.IsNull() && !plan.Groups.IsUnknown() {
 		var groups []string
 		resp.Diagnostics.Append(plan.Groups.ElementsAs(ctx, &groups, false)...)
@@ -501,6 +498,26 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 			return
 		}
 		payload["groups"] = groups
+	} else if !state.Groups.IsNull() && !state.Groups.IsUnknown() {
+		var groups []string
+		state.Groups.ElementsAs(ctx, &groups, false)
+		payload["groups"] = groups
+	}
+
+	// Handle mfa_method - use state value since it's computed
+	if !state.MFAMethod.IsNull() && !state.MFAMethod.IsUnknown() {
+		payload["mfa_method"] = state.MFAMethod.ValueString()
+	} else {
+		payload["mfa_method"] = "None"
+	}
+
+	// Handle authorized_apps - use state value since it's computed
+	if !state.AuthorizedApps.IsNull() && !state.AuthorizedApps.IsUnknown() {
+		var apps []string
+		state.AuthorizedApps.ElementsAs(ctx, &apps, false)
+		payload["authorized_apps"] = apps
+	} else {
+		payload["authorized_apps"] = []interface{}{}
 	}
 
 	respObj, err := r.client.Put(ctx, path, payload)
@@ -515,9 +532,63 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	// Update state from response
-	if name, ok := result["name"].(string); ok {
-		plan.Name = types.StringValue(name)
+	// Update state from response - read all computed fields from API response
+	if name, ok := result["name"]; ok && name != nil {
+		plan.Name = types.StringValue(name.(string))
+	} else {
+		plan.Name = types.StringNull()
+	}
+
+	if enrolled, ok := result["enrolled"]; ok && enrolled != nil {
+		plan.Enrolled = types.BoolValue(enrolled.(bool))
+	} else {
+		plan.Enrolled = types.BoolNull()
+	}
+
+	if mfaEnabled, ok := result["mfa_enabled"]; ok && mfaEnabled != nil {
+		plan.MFAEnabled = types.BoolValue(mfaEnabled.(bool))
+	} else {
+		plan.MFAEnabled = types.BoolNull()
+	}
+
+	if totpEnabled, ok := result["totp_enabled"]; ok && totpEnabled != nil {
+		plan.TOTPEnabled = types.BoolValue(totpEnabled.(bool))
+	} else {
+		plan.TOTPEnabled = types.BoolNull()
+	}
+
+	if emailMFAEnabled, ok := result["email_mfa_enabled"]; ok && emailMFAEnabled != nil {
+		plan.EmailMFAEnabled = types.BoolValue(emailMFAEnabled.(bool))
+	} else {
+		plan.EmailMFAEnabled = types.BoolNull()
+	}
+
+	if mfaMethod, ok := result["mfa_method"]; ok && mfaMethod != nil {
+		plan.MFAMethod = types.StringValue(mfaMethod.(string))
+	} else {
+		plan.MFAMethod = types.StringNull()
+	}
+
+	if ldapPassRequiresChange, ok := result["ldap_pass_requires_change"]; ok && ldapPassRequiresChange != nil {
+		plan.LDAPPassRequiresChange = types.BoolValue(ldapPassRequiresChange.(bool))
+	} else {
+		plan.LDAPPassRequiresChange = types.BoolNull()
+	}
+
+	if appsRaw, ok := result["authorized_apps"].([]interface{}); ok && appsRaw != nil {
+		var authorizedApps []attr.Value
+		for _, app := range appsRaw {
+			if appStr, ok := app.(string); ok {
+				authorizedApps = append(authorizedApps, types.StringValue(appStr))
+			}
+		}
+		if len(authorizedApps) > 0 {
+			plan.AuthorizedApps, _ = types.ListValue(types.StringType, authorizedApps)
+		} else {
+			plan.AuthorizedApps, _ = types.ListValue(types.StringType, []attr.Value{})
+		}
+	} else {
+		plan.AuthorizedApps, _ = types.ListValue(types.StringType, []attr.Value{})
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
